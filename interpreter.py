@@ -44,6 +44,9 @@ class Interpreter:
                 return -val
             raise RuntimeError(f"unknown unary operator '{node.op}'")
 
+        if isinstance(node, FunctionCall):
+            return self._eval_call(node, env)
+
         # ── statements ────────────────────────────────────────────────────────
         if isinstance(node, LetStatement):
             env.set(node.name, self.evaluate(node.value, env))
@@ -70,6 +73,14 @@ class Interpreter:
             while self.evaluate(node.condition, env):
                 self.evaluate(node.body, env)
             return None
+
+        if isinstance(node, FunctionDecl):
+            env.set(node.name, node)
+            return None
+
+        if isinstance(node, ReturnStatement):
+            value = self.evaluate(node.value, env) if node.value is not None else None
+            raise _ReturnException(value)
 
         raise RuntimeError(f"cannot evaluate node type '{type(node).__name__}'")
 
@@ -130,6 +141,39 @@ class Interpreter:
                 f"'{context}' requires a number, got {type(val).__name__}"
             )
 
+    def _eval_call(self, node: FunctionCall, env: Environment) -> object:
+        # look up the name — raises RuntimeError if undefined
+        fn = env.get(node.name)
+
+        if not isinstance(fn, FunctionDecl):
+            raise RuntimeError(
+                f"'{node.name}' is not a function (got {type(fn).__name__})"
+            )
+
+        if len(node.args) != len(fn.params):
+            raise RuntimeError(
+                f"'{node.name}' expects {len(fn.params)} argument(s) "
+                f"but got {len(node.args)}"
+            )
+
+        # evaluate every argument in the CALLER's env before entering the
+        # new scope — this prevents parameter names from shadowing outer
+        # variables during argument evaluation (e.g. add(x, x*2) when x is
+        # also a parameter name)
+        arg_values = [self.evaluate(arg, env) for arg in node.args]
+
+        # new scope whose parent is the caller's env (gives dynamic scoping —
+        # functions can see globals and are clean enough for our language)
+        call_env = Environment(parent=env)
+        for param, val in zip(fn.params, arg_values):
+            call_env.set(param, val)
+
+        try:
+            self.evaluate(fn.body, call_env)
+            return None   # function ran to completion with no return statement
+        except _ReturnException as ret:
+            return ret.value
+
     def _display(self, val: object) -> str:
         """Format a value for print() — booleans show as true/false."""
         if isinstance(val, bool):
@@ -145,4 +189,7 @@ class Interpreter:
             env = Environment()
         stmts = Parser.from_source(source).parse_program()
         for stmt in stmts:
-            self.evaluate(stmt, env)
+            try:
+                self.evaluate(stmt, env)
+            except _ReturnException:
+                raise RuntimeError("'return' statement outside of a function")
