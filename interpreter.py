@@ -44,6 +44,33 @@ class Interpreter:
                 return -val
             raise RuntimeError(f"unknown unary operator '{node.op}'")
 
+        # ── statements ────────────────────────────────────────────────────────
+        if isinstance(node, LetStatement):
+            env.set(node.name, self.evaluate(node.value, env))
+            return None
+
+        if isinstance(node, PrintStatement):
+            val = self.evaluate(node.expr, env)
+            print(self._display(val))
+            return None
+
+        if isinstance(node, Block):
+            for stmt in node.statements:
+                self.evaluate(stmt, env)
+            return None
+
+        if isinstance(node, IfStatement):
+            if self.evaluate(node.condition, env):
+                self.evaluate(node.then_block, env)
+            elif node.else_block is not None:
+                self.evaluate(node.else_block, env)
+            return None
+
+        if isinstance(node, WhileStatement):
+            while self.evaluate(node.condition, env):
+                self.evaluate(node.body, env)
+            return None
+
         raise RuntimeError(f"cannot evaluate node type '{type(node).__name__}'")
 
     # ── binary operator evaluation ────────────────────────────────────────────
@@ -102,3 +129,20 @@ class Interpreter:
             raise RuntimeError(
                 f"'{context}' requires a number, got {type(val).__name__}"
             )
+
+    def _display(self, val: object) -> str:
+        """Format a value for print() — booleans show as true/false."""
+        if isinstance(val, bool):
+            return "true" if val else "false"
+        return str(val)
+
+    # ── public runner ─────────────────────────────────────────────────────────
+
+    def run(self, source: str, env: Environment | None = None) -> None:
+        """Lex → parse → evaluate a full program string."""
+        from parser import Parser
+        if env is None:
+            env = Environment()
+        stmts = Parser.from_source(source).parse_program()
+        for stmt in stmts:
+            self.evaluate(stmt, env)
