@@ -1,0 +1,26 @@
+// fizzbuzz.mylang — while loop, if/else, modulo via subtraction
+
+fn mod(a, b) {
+    while a >= b {
+        let a = a - b;
+    }
+    return a;
+}
+
+let i = 1;
+while i <= 20 {
+    if mod(i, 15) == 0 {
+        print("fizzbuzz");
+    } else {
+        if mod(i, 3) == 0 {
+            print("fizz");
+        } else {
+            if mod(i, 5) == 0 {
+                print("buzz");
+            } else {
+                print(i);
+            }
+        }
+    }
+    let i = i + 1;
+}

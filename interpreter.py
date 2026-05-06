@@ -175,9 +175,11 @@ class Interpreter:
             return ret.value
 
     def _display(self, val: object) -> str:
-        """Format a value for print() — booleans show as true/false."""
         if isinstance(val, bool):
             return "true" if val else "false"
+        if isinstance(val, float):
+            # drop trailing zeros: 3.5 stays 3.5, 3.3333... stays readable
+            return f"{val:.10g}"
         return str(val)
 
     # ── public runner ─────────────────────────────────────────────────────────
