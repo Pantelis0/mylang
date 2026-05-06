@@ -237,7 +237,98 @@ class Parser:
             tok.line,
         )
 
-    # ── public entry point ────────────────────────────────────────────────────
+    # ── statement parsers ─────────────────────────────────────────────────────
+
+    def parse_block(self) -> Block:
+        """Parse `{ statement* }` and return a Block."""
+        self._expect(TokenType.LBRACE)
+        stmts = []
+        while not self._check(TokenType.RBRACE, TokenType.EOF):
+            stmts.append(self.parse_statement())
+        self._expect(TokenType.RBRACE)
+        return Block(stmts)
+
+    def parse_statement(self) -> ASTNode:
+        tok = self._current()
+
+        if tok.type == TokenType.LET:
+            return self._parse_let()
+        if tok.type == TokenType.PRINT:
+            return self._parse_print()
+        if tok.type == TokenType.IF:
+            return self._parse_if()
+        if tok.type == TokenType.WHILE:
+            return self._parse_while()
+        if tok.type == TokenType.FN:
+            return self._parse_fn()
+        if tok.type == TokenType.RETURN:
+            return self._parse_return()
+
+        # expression statement — e.g. a bare function call like foo(x);
+        expr = self.parse_comparison()
+        self._expect(TokenType.SEMICOLON)
+        return expr
+
+    def _parse_let(self) -> LetStatement:
+        self._advance()                          # consume 'let'
+        name = self._expect(TokenType.IDENT).value
+        self._expect(TokenType.EQ)
+        value = self.parse_comparison()
+        self._expect(TokenType.SEMICOLON)
+        return LetStatement(name, value)
+
+    def _parse_print(self) -> PrintStatement:
+        self._advance()                          # consume 'print'
+        self._expect(TokenType.LPAREN)
+        expr = self.parse_comparison()
+        self._expect(TokenType.RPAREN)
+        self._expect(TokenType.SEMICOLON)
+        return PrintStatement(expr)
+
+    def _parse_if(self) -> IfStatement:
+        self._advance()                          # consume 'if'
+        condition  = self.parse_comparison()
+        then_block = self.parse_block()
+        else_block = None
+        if self._match(TokenType.ELSE):
+            else_block = self.parse_block()
+        return IfStatement(condition, then_block, else_block)
+
+    def _parse_while(self) -> WhileStatement:
+        self._advance()                          # consume 'while'
+        condition = self.parse_comparison()
+        body      = self.parse_block()
+        return WhileStatement(condition, body)
+
+    def _parse_fn(self) -> FunctionDecl:
+        self._advance()                          # consume 'fn'
+        name = self._expect(TokenType.IDENT).value
+        self._expect(TokenType.LPAREN)
+        params = []
+        if not self._check(TokenType.RPAREN):
+            params.append(self._expect(TokenType.IDENT).value)
+            while self._match(TokenType.COMMA):
+                params.append(self._expect(TokenType.IDENT).value)
+        self._expect(TokenType.RPAREN)
+        body = self.parse_block()
+        return FunctionDecl(name, params, body)
+
+    def _parse_return(self) -> ReturnStatement:
+        self._advance()                          # consume 'return'
+        value = None
+        if not self._check(TokenType.SEMICOLON):
+            value = self.parse_comparison()
+        self._expect(TokenType.SEMICOLON)
+        return ReturnStatement(value)
+
+    # ── public entry points ───────────────────────────────────────────────────
+
+    def parse_program(self) -> list[ASTNode]:
+        """Parse a full program — a sequence of statements until EOF."""
+        stmts = []
+        while not self._check(TokenType.EOF):
+            stmts.append(self.parse_statement())
+        return stmts
 
     @classmethod
     def from_source(cls, source: str) -> "Parser":
